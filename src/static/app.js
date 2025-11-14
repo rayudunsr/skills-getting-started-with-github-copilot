@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      // Reset activity select to default placeholder to avoid duplicates
+      activitySelect.innerHTML = `<option value="">-- Select an activity --</option>`;
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -22,7 +24,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const participantsHtml = details.participants && details.participants.length
           ? `<ul class="participants-list">${details.participants
-              .map((p) => `<li>${p}</li>`)
+              .map((p) => `
+                <li class="participant-item">
+                  <span class="participant-email">${p}</span>
+                  <button type="button" class="delete-participant" data-activity="${encodeURIComponent(
+                    name
+                  )}" data-email="${encodeURIComponent(p)}" aria-label="Remove ${p}">×</button>
+                </li>
+              `)
               .join("")}</ul>`
           : `<p class="info">No participants yet.</p>`;
 
@@ -36,6 +45,45 @@ document.addEventListener("DOMContentLoaded", () => {
             ${participantsHtml}
           </div>
         `;
+
+        // Attach delete handlers for participant buttons
+        activityCard.querySelectorAll(".delete-participant").forEach((btn) => {
+          btn.addEventListener("click", async (e) => {
+            const encodedActivity = btn.dataset.activity;
+            const encodedEmail = btn.dataset.email;
+            const activityName = decodeURIComponent(encodedActivity);
+            const email = decodeURIComponent(encodedEmail);
+
+            if (!confirm(`Unregister ${email} from ${activityName}?`)) return;
+
+            try {
+              const res = await fetch(
+                `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(email)}`,
+                { method: "DELETE" }
+              );
+              const result = await res.json();
+
+              if (res.ok) {
+                messageDiv.textContent = result.message;
+                messageDiv.className = "success";
+                // refresh list
+                fetchActivities();
+              } else {
+                messageDiv.textContent = result.detail || "Failed to remove participant";
+                messageDiv.className = "error";
+              }
+            } catch (err) {
+              console.error("Error removing participant:", err);
+              messageDiv.textContent = "Failed to remove participant. Please try again.";
+              messageDiv.className = "error";
+            }
+
+            messageDiv.classList.remove("hidden");
+            setTimeout(() => {
+              messageDiv.classList.add("hidden");
+            }, 5000);
+          });
+        });
 
         activitiesList.appendChild(activityCard);
 
@@ -72,6 +120,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities so the new participant appears without a manual reload
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
